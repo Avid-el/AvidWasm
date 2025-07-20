@@ -23,6 +23,9 @@ public:
 public:
 	UFUNCTION(BlueprintCallable, Category = "Wasm")
 	int32 CallWasmAdd(int32 a, int32 b);
+	
+	UFUNCTION(BlueprintCallable, Category = "Wasm")
+	void RunWasmCode();
 
 protected:
 	virtual void BeginPlay() override;
