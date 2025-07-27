@@ -8,16 +8,34 @@ public class AvidWasm : ModuleRules
 	public AvidWasm(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		
-		// wasm3 库路径
-		string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
-		string Wasm3Path = Path.Combine(ThirdPartyPath, "wasm3");
-		string Wasm3IncludePath = Path.Combine(Wasm3Path, "include");
-		string Wasm3LibPath = Path.Combine(Wasm3Path, "lib");
-		
+		bool bUseWasm3 = false; // 是否使用 wasm3 库
+		bool bUseWasmtime = true; // 是否使用 wasmtime 库
+
+		string WasmIncludePath = "";
+		string WasmLibPath = "";
+		if (bUseWasm3)
+		{
+			PublicDefinitions.Add("WITH_WASM3=1");
+			// wasm3 库路径
+			string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
+			string WasmRuntimePath = Path.Combine(ThirdPartyPath, "wasm3");
+			WasmIncludePath = Path.Combine(WasmRuntimePath, "include");
+			WasmLibPath = Path.Combine(WasmRuntimePath, "lib");
+		}
+		else if (bUseWasmtime)
+		{
+			PublicDefinitions.Add("WITH_WASMTIME=1");
+			// wasm3 库路径
+			string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
+			string WasmRuntimePath = Path.Combine(ThirdPartyPath, "Wasmtime");
+			WasmIncludePath = Path.Combine(WasmRuntimePath, "include");
+			WasmLibPath = Path.Combine(WasmRuntimePath, "lib");
+		}
+
+
 		PublicIncludePaths.AddRange(
 			new string[] {
-				Wasm3IncludePath
+				WasmIncludePath
 				// ... add public include paths required here ...
 			}
 			);
@@ -60,11 +78,18 @@ public class AvidWasm : ModuleRules
 		
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			PublicAdditionalLibraries.Add(Path.Combine(Wasm3LibPath, "Win64", "m3.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Win64", "m3.lib"));
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{
-			PublicAdditionalLibraries.Add(Path.Combine(Wasm3LibPath, "Mac", "libm3.a"));
+			if (bUseWasmtime)
+			{
+				PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Mac", "libwasmtime.a"));
+			}
+			else if (bUseWasm3)
+			{
+				PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Mac", "libm3.a"));
+			}
 		}
 	}
 }

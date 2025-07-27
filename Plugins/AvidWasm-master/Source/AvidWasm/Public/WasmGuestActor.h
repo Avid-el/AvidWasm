@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#define WITH_WASM3_INTEGRATION 1
 // 包含Wasm3的头文件
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASM3
 #include "wasm3.h"
+#endif
+// 包含Wasmtime的头文件
+#if WITH_WASMTIME
+#include "wasmtime.h"
 #endif
 #include "WasmGuestActor.generated.h"
 
@@ -25,7 +28,7 @@ public:
 	int32 CallWasmAdd(int32 a, int32 b);
 	
 	UFUNCTION(BlueprintCallable, Category = "Wasm")
-	void RunWasmCode();
+	void TestWasm3CallUE();
 
 protected:
 	virtual void BeginPlay() override;
@@ -34,7 +37,12 @@ protected:
 private:
 	void InitializeWasm();
 
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASMTIME
+	wasm_engine_t* Engine = nullptr;
+	wasmtime_store_t* Store = nullptr;
+#endif
+
+#if WITH_WASM3
 	// 【关键修正】将Environment也作为成员变量，以保证其生命周期
 	IM3Environment M3Environment;
 

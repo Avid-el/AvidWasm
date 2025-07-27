@@ -3,7 +3,7 @@
 #include "Misc/FileHelper.h"
 #include "Kismet/KismetSystemLibrary.h"
 
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASM3
 const void* NativeUnrealLog(IM3Runtime runtime, IM3ImportContext _ctx, uint64_t* _sp, void* _mem);
 
 const void* wasmAbort(IM3Runtime runtime, IM3ImportContext _ctx, uint64_t* _sp, void* _mem)
@@ -39,15 +39,14 @@ extern "C" const void* Native_CallUEFunction(IM3Runtime runtime, M3ImportContext
 	return m3Err_none;
 }
 
-#endif // WITH_WASM3_INTEGRATION
-
+#endif // WITH_WASM3
 
 AWasmGuestActor::AWasmGuestActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
 	// 【最佳实践】在构造函数中初始化所有指针成员为nullptr
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASM3
 	M3Environment = nullptr;
 	M3Runtime = nullptr;
 	M3Module = nullptr;
@@ -64,8 +63,8 @@ void AWasmGuestActor::BeginPlay()
 void AWasmGuestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
-#if WITH_WASM3_INTEGRATION
-	// 【关键修正】现在只释放Environment即可，它会管理所有相关资源，不会再崩溃
+#if WITH_WASM3
+	// 【关键修正】现在只释放Environment即可，它会管理所有相关资源，不会再崩�����
 	if (M3Environment)
 	{
 		m3_FreeEnvironment(M3Environment);
@@ -77,7 +76,28 @@ void AWasmGuestActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AWasmGuestActor::InitializeWasm()
 {
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASMTIME
+	UE_LOG(LogTemp, Warning, TEXT("Initializing Wasmtime..."));
+    
+	// 1. 创建一个Engine，这是Wasmtime的JIT编译器核心
+	// 对于整个应用程序，通常只需要一个Engine
+	Engine = wasm_engine_new();
+	if (!Engine)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to create Wasmtime engine!"));
+		return;
+	}
+
+	// 2. 创建一个Store，Wasm实例和对象都存在于Store中
+	Store = wasmtime_store_new(Engine, nullptr, nullptr);
+	if (!Store)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to create Wasmtime store!"));
+		return;
+	}
+#endif
+	
+#if WITH_WASM3
     // ---- 1-3步骤保持不变 ----
     M3Environment = m3_NewEnvironment();
     if (!M3Environment) {
@@ -130,8 +150,7 @@ void AWasmGuestActor::InitializeWasm()
 	if (linkResult == m3Err_none) {
 		UE_LOG(LogTemp, Log, TEXT("Successfully linked abort function"));
 	}
-
-    // 尝试2: 如果hostLog失败，尝试其他可能的名称
+	
     if (!linkSuccess) {
         linkResult = m3_LinkRawFunction(M3Module, "env", "log", "v(ii)", &NativeUnrealLog);
         if (linkResult == m3Err_none) {
@@ -165,7 +184,8 @@ void AWasmGuestActor::InitializeWasm()
 
     // ---- 编译模块 ----
     M3Result compileResult = m3_CompileModule(M3Module);
-    if (compileResult != m3Err_none) {
+    if (compileResult != m3Err_none)
+    {
         UE_LOG(LogTemp, Error, TEXT("Wasm3: m3_CompileModule failed with error: %s"), ANSI_TO_TCHAR(compileResult));
         return;
     }
@@ -195,7 +215,7 @@ void AWasmGuestActor::InitializeWasm()
             }
             else
             {
-                UE_LOG(LogTemp, Log, TEXT("找到 'main' 函数"));
+                UE_LOG(LogTemp, Log, TEXT("找到 'main' ���数"));
             }
         }
         else
@@ -209,15 +229,12 @@ void AWasmGuestActor::InitializeWasm()
     }
 
     UE_LOG(LogTemp, Log, TEXT("WasmGuestActor: 初始化成功，函数已缓存"));
-
-#else
-    UE_LOG(LogTemp, Warning, TEXT("WasmGuestActor: WasmRuntime plugin is disabled"));
 #endif
 }
 
 void AWasmGuestActor::TriggerWasmLogic()
 {
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASM3
 	if (WasmStartFunction)
 	{
 		UE_LOG(LogTemp, Log, TEXT("UE -> Calling cached Wasm function 'startMyLogic'..."));
@@ -236,7 +253,7 @@ void AWasmGuestActor::TriggerWasmLogic()
 
 int32 AWasmGuestActor::CallWasmAdd(int32 a, int32 b)
 {
-#if WITH_WASM3_INTEGRATION
+#if WITH_WASM3
 	if (!WasmStartFunction)
 	{
 		UE_LOG(LogTemp, Error, TEXT("WasmGuestActor: add function not available"));
@@ -264,14 +281,103 @@ int32 AWasmGuestActor::CallWasmAdd(int32 a, int32 b)
 	UE_LOG(LogTemp, Log, TEXT("Wasm add(%d, %d) = %d"), a, b, wasmResult);
     
 	return wasmResult;
-#else
-	UE_LOG(LogTemp, Warning, TEXT("WasmGuestActor: WITH_WASM3_INTEGRATION is disabled"));
-	return 0;
+#elif WITH_WASMTIME
+	 if (!Store) return -1;
+	wasmtime_context_t* Context = wasmtime_store_context(Store);
+	const FString WasmFilePath = TEXT("release.wasm");
+    // --- 1. 加载 .wasm 文件字节码 ---
+    FString FullPath = FPaths::ProjectContentDir() + WasmFilePath;
+    TArray<uint8> WasmFileContent;
+    if (!FFileHelper::LoadFileToArray(WasmFileContent, *FullPath))
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to load Wasm file: %s"), *FullPath);
+        return -1;
+    }
+    UE_LOG(LogTemp, Log, TEXT("Loaded %d bytes from %s"), WasmFileContent.Num(), *FullPath);
+
+    // --- 2. 编译模块 ---
+    // 将UE的TArray转换为Wasmtime的wasm_byte_vec_t
+    wasm_byte_vec_t WasmBytes;
+    wasm_byte_vec_new(&WasmBytes, WasmFileContent.Num(), (const wasm_byte_t*)WasmFileContent.GetData());
+
+	wasmtime_error_t* Error = nullptr;
+	wasmtime_module_t* Module;
+    Error = wasmtime_module_new(Engine, WasmFileContent.GetData(), WasmFileContent.Num(), &Module);
+    wasm_byte_vec_delete(&WasmBytes); // 字节码已拷贝，可以释放
+    
+    if (Error)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Failed to compile Wasm module."));
+        return -1;
+    }
+
+    // --- 3. 实例化模块 ---
+	wasmtime_instance_t Instance;
+	wasm_trap_t* Trap = nullptr;
+    Error = wasmtime_instance_new(Context, Module, nullptr, 0, &Instance, &Trap);
+    if (Error || Trap)
+    {
+	    // 如果发生错误或陷阱，打印错误信息
+    	if (Error)
+    	{
+    		UE_LOG(LogTemp, Error, TEXT("Failed to instantiate Wasm module"));
+    		wasmtime_error_delete(Error);
+    	}
+    	if (Trap)
+    	{
+    		wasm_message_t TrapMessage;
+    		wasm_trap_message(Trap, &TrapMessage);
+    		UE_LOG(LogTemp, Error, TEXT("Wasm trap occurred: %s"), *FString(TrapMessage.size, TrapMessage.data));
+    		wasm_trap_delete(Trap);
+    	}
+    }
+	// --- 4. 查找导出的 "add" 函数 ---
+	wasmtime_extern_t AddExtern;
+	FString Name = TEXT("Add");
+	int32 FuncLength = Name.Len();
+	bool success = wasmtime_instance_export_get(Context, &Instance, TCHAR_TO_ANSI(*Name), FuncLength, &AddExtern);
+	if (!success || AddExtern.kind != WASMTIME_EXTERN_FUNC)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get exported function"));
+		return false;
+	}
+	wasmtime_val_t args[2];
+	args[0].kind = WASMTIME_I32;
+	args[0].of.i32 = a;
+	args[1].kind = WASMTIME_I32;
+	args[1].of.i32 = b;
+	wasmtime_val_t results[1];
+    
+	Error = wasmtime_func_call(Context, &AddExtern.of.func, args, 2, results, 1, &Trap);
+    
+	if (Error || Trap)
+	{
+		if (Error)
+		{
+			wasm_name_t error_name;
+			wasmtime_error_message(Error, &error_name);
+			UE_LOG(LogTemp, Error, TEXT("Error calling function: %s"), 
+				   UTF8_TO_TCHAR(error_name.data));
+			wasm_name_delete(&error_name);
+			wasmtime_error_delete(Error);
+		}
+		if (Trap)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Wasm trap occurred"));
+		}
+		return -1;
+	}
+    
+	int32 result = results[0].of.i32;
+	UE_LOG(LogTemp, Log, TEXT("Wasm add(%d, %d) = %d"), a, b, result);
+    
+	return result;
 #endif
 }
 
 // 1. 定义 C++ 函数，它将作为 Wasm 导入函数的实现。
 // 这是 wasm3 中用于链接原始 C 函数的标准签名。
+#if WITH_WASM3
 const void* NativeUnrealLog(IM3Runtime runtime, IM3ImportContext _ctx, uint64_t* _sp, void* _mem)
 {
     // 从 wasm3 的调用栈中获取参数。
@@ -299,11 +405,13 @@ const void* NativeUnrealLog(IM3Runtime runtime, IM3ImportContext _ctx, uint64_t*
 
 	return (const void*)m3Err_none;
 }
+#endif
 
 
 // 在你的 Wasm 初始化和执行函数中
-void AWasmGuestActor::RunWasmCode()
+void AWasmGuestActor::TestWasm3CallUE()
 {
+#if WITH_WASM3
     // ... 原有的 wasm3 环境、运行时和模块加载代码 ...
     // IM3Environment env = m3_NewEnvironment();
     // IM3Runtime runtime = m3_NewRuntime(env, 1024, nullptr);
@@ -336,4 +444,5 @@ void AWasmGuestActor::RunWasmCode()
     }
 
     // ... 清理 wasm3 环境 ...
+#endif
 }
