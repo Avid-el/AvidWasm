@@ -16,6 +16,7 @@ public class AvidWasm : ModuleRules
 		if (bUseWasm3)
 		{
 			PublicDefinitions.Add("WITH_WASM3=1");
+			PublicDefinitions.Add("WITH_WASMTIME=0");
 			// wasm3 库路径
 			string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
 			string WasmRuntimePath = Path.Combine(ThirdPartyPath, "wasm3");
@@ -25,7 +26,8 @@ public class AvidWasm : ModuleRules
 		else if (bUseWasmtime)
 		{
 			PublicDefinitions.Add("WITH_WASMTIME=1");
-			// wasm3 库路径
+			PublicDefinitions.Add("WITH_WASM3=0");
+			// wasmtime 库路径
 			string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
 			string WasmRuntimePath = Path.Combine(ThirdPartyPath, "Wasmtime");
 			WasmIncludePath = Path.Combine(WasmRuntimePath, "include");
@@ -78,7 +80,22 @@ public class AvidWasm : ModuleRules
 		
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Win64", "m3.lib"));
+			if(bUseWasmtime)
+			{
+				PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Win64", "wasmtime.lib"));
+				PublicSystemLibraries.Add("ws2_32.lib");
+				PublicSystemLibraries.Add("advapi32.lib");
+				PublicSystemLibraries.Add("userenv.lib");
+				PublicSystemLibraries.Add("ntdll.lib");
+				PublicSystemLibraries.Add("shell32.lib");
+				PublicSystemLibraries.Add("ole32.lib");
+				PublicSystemLibraries.Add("bcrypt.lib");
+				PublicDefinitions.Add("WASM_API_EXTERN=");
+			}else if (bUseWasm3)
+			{
+				PublicAdditionalLibraries.Add(Path.Combine(WasmLibPath, "Win64", "m3.lib"));
+			}
+
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Mac)
 		{

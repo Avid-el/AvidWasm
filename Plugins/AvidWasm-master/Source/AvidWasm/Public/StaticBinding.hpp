@@ -48,8 +48,8 @@ class ClassType: public RegisterType
 	{
 		FString Name;
 	};
-	static TMap<FString, ConstructorInfo> Constructors;
-	static TMap<FString, VariableType> StaticVariables;
+	inline static TMap<FString, ConstructorInfo> Constructors;
+	inline static TMap<FString, VariableType> StaticVariables;
 };
 
 template <typename C>

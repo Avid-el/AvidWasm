@@ -284,7 +284,8 @@ int32 AWasmGuestActor::CallWasmAdd(int32 a, int32 b)
 #elif WITH_WASMTIME
 	 if (!Store) return -1;
 	wasmtime_context_t* Context = wasmtime_store_context(Store);
-	const FString WasmFilePath = TEXT("release.wasm");
+	const FString WasmFilePath = TEXT("release2.wasm");
+	// const FString WasmFilePath = TEXT("release.wasm");
     // --- 1. 加载 .wasm 文件字节码 ---
     FString FullPath = FPaths::ProjectContentDir() + WasmFilePath;
     TArray<uint8> WasmFileContent;
@@ -318,22 +319,23 @@ int32 AWasmGuestActor::CallWasmAdd(int32 a, int32 b)
     if (Error || Trap)
     {
 	    // 如果发生错误或陷阱，打印错误信息
-    	if (Error)
-    	{
-    		UE_LOG(LogTemp, Error, TEXT("Failed to instantiate Wasm module"));
-    		wasmtime_error_delete(Error);
-    	}
-    	if (Trap)
-    	{
-    		wasm_message_t TrapMessage;
-    		wasm_trap_message(Trap, &TrapMessage);
-    		UE_LOG(LogTemp, Error, TEXT("Wasm trap occurred: %s"), *FString(TrapMessage.size, TrapMessage.data));
-    		wasm_trap_delete(Trap);
-    	}
+    	// if (Error)
+    	// {
+    	// 	UE_LOG(LogTemp, Error, TEXT("Failed to instantiate Wasm module"));
+    	// 	wasmtime_error_delete(Error);
+    	// }
+    	// if (Trap)
+    	// {
+    	// 	wasm_message_t TrapMessage;
+    	// 	wasm_trap_message(Trap, &TrapMessage);
+    	// 	UE_LOG(LogTemp, Error, TEXT("Wasm trap occurred: %s"), *FString(TrapMessage.size, TrapMessage.data));
+    	// 	wasm_trap_delete(Trap);
+    	// }
     }
 	// --- 4. 查找导出的 "add" 函数 ---
 	wasmtime_extern_t AddExtern;
-	FString Name = TEXT("Add");
+	AddExtern.kind = WASMTIME_EXTERN_FUNC;
+	FString Name = TEXT("add");
 	int32 FuncLength = Name.Len();
 	bool success = wasmtime_instance_export_get(Context, &Instance, TCHAR_TO_ANSI(*Name), FuncLength, &AddExtern);
 	if (!success || AddExtern.kind != WASMTIME_EXTERN_FUNC)

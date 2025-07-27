@@ -106,3 +106,4 @@ MyWasmLogic/tsconfig.tsbuildinfo
 MyWasmLogic/npm-debug.log*
 MyWasmLogic/yarn-error.log
 MyWasmLogic/yarn-debug.log
+!Content/*.wasm
